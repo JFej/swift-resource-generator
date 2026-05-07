@@ -128,6 +128,138 @@ import Testing
   #expect(components["alpha"] as? String == "0xFF")
 }
 
+@Test func encodesColorSetWithMultipleAppearanceVariants() throws {
+  let output = temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: output) }
+
+  let package = ResourcePackage {
+    AssetCatalog("Assets") {
+      AssetColorSet(
+        "Theme",
+        entries: [
+          .init(
+            color: .init(components: .init(red: 1, green: 1, blue: 1, alpha: 1)),
+            appearances: [.luminosity(.light)]
+          ),
+          .init(
+            color: .init(components: .init(red: 0, green: 0, blue: 0, alpha: 1)),
+            appearances: [.luminosity(.dark)]
+          ),
+          .init(
+            color: .init(components: .init(red: 0, green: 0.5, blue: 1, alpha: 1)),
+            appearances: [.luminosity(.dark), .contrast(.high)]
+          ),
+        ]
+      )
+    }
+  }
+
+  try package.write(to: output)
+
+  let metadata = try json(
+    from: output.appendingPathComponent("Assets.xcassets/Theme.colorset/Contents.json"))
+  let colors = try #require(metadata["colors"] as? [[String: Any]])
+  #expect(colors.count == 3)
+
+  let any = try #require(
+    colors.first { entry in
+      let appearances = entry["appearances"] as? [[String: Any]]
+      return appearances == nil
+    })
+  var definition = try #require(any["color"] as? [String: Any])
+  var components = try #require(definition["components"] as? [String: Any])
+  #expect(components["red"] as? String == "0xFF")
+
+  #expect(
+    colors.contains { entry in
+      guard let appearances = entry["appearances"] as? [[String: Any]] else { return false }
+      return appearances.contains {
+        ($0["appearance"] as? String) == "luminosity" && ($0["value"] as? String) == "light"
+      }
+    } == false)
+
+  let dark = try #require(
+    colors.first { entry in
+      guard let appearances = entry["appearances"] as? [[String: Any]] else { return false }
+      return appearances.count == 1
+        && appearances.contains {
+          ($0["appearance"] as? String) == "luminosity" && ($0["value"] as? String) == "dark"
+        }
+    })
+  definition = try #require(dark["color"] as? [String: Any])
+  components = try #require(definition["components"] as? [String: Any])
+  #expect(components["red"] as? String == "0x00")
+
+  let darkHighContrast = try #require(
+    colors.first { entry in
+      guard let appearances = entry["appearances"] as? [[String: Any]] else { return false }
+      return appearances.count == 2
+        && appearances.contains {
+          ($0["appearance"] as? String) == "luminosity" && ($0["value"] as? String) == "dark"
+        }
+        && appearances.contains {
+          ($0["appearance"] as? String) == "contrast" && ($0["value"] as? String) == "high"
+        }
+    })
+  definition = try #require(darkHighContrast["color"] as? [String: Any])
+  components = try #require(definition["components"] as? [String: Any])
+  #expect(components["green"] as? String == "0x80")
+  #expect(components["blue"] as? String == "0xFF")
+}
+
+@Test func rewritesLightDarkColorSetIntoAnyDarkFallbackShape() throws {
+  let output = temporaryDirectory()
+  defer { try? FileManager.default.removeItem(at: output) }
+
+  let package = ResourcePackage {
+    AssetCatalog("Assets") {
+      AssetColorSet(
+        "LaunchScreenBackgroundColor",
+        entries: [
+          .init(
+            color: .init(components: .init(red: 0, green: 0.3686, blue: 0.7255, alpha: 1)),
+            appearances: [.luminosity(.light)]
+          ),
+          .init(
+            color: .init(components: .init(red: 0.0706, green: 0.2549, blue: 0.4314, alpha: 1)),
+            appearances: [.luminosity(.dark)]
+          ),
+        ]
+      )
+    }
+  }
+
+  try package.write(to: output)
+
+  let metadata = try json(
+    from: output.appendingPathComponent(
+      "Assets.xcassets/LaunchScreenBackgroundColor.colorset/Contents.json"))
+  let colors = try #require(metadata["colors"] as? [[String: Any]])
+  #expect(colors.count == 2)
+
+  let any = try #require(
+    colors.first { entry in
+      let appearances = entry["appearances"] as? [[String: Any]]
+      return appearances == nil
+    })
+  let dark = try #require(
+    colors.first { entry in
+      guard let appearances = entry["appearances"] as? [[String: Any]] else { return false }
+      return appearances.count == 1
+        && appearances.contains {
+          ($0["appearance"] as? String) == "luminosity" && ($0["value"] as? String) == "dark"
+        }
+    })
+
+  var definition = try #require(any["color"] as? [String: Any])
+  var components = try #require(definition["components"] as? [String: Any])
+  #expect(components["green"] as? String == "0x5E")
+
+  definition = try #require(dark["color"] as? [String: Any])
+  components = try #require(definition["components"] as? [String: Any])
+  #expect(components["red"] as? String == "0x12")
+}
+
 @Test func supportsDataSymbolAndAppIconSets() throws {
   let output = temporaryDirectory()
   defer { try? FileManager.default.removeItem(at: output) }

@@ -120,6 +120,8 @@ public struct AssetColorSet: AssetNode, Sendable {
         details: "expects at least one color entry"
       )
     }
+
+    _ = try normalizedEntriesForGeneration()
   }
 
   /// Generates the `.colorset` directory and `Contents.json`.
@@ -129,15 +131,50 @@ public struct AssetColorSet: AssetNode, Sendable {
     -> [GeneratedEntry]
   {
     let setPath = "\(parentPath)/\(name).colorset"
+    let normalizedEntries = try normalizedEntriesForGeneration()
     return [
       .directory(setPath),
       .file(
         "\(setPath)/Contents.json",
         try AssetCatalogJSON.encode(
-          ContentsFile(colors: entries, info: AssetCatalogJSON.info),
+          ContentsFile(colors: normalizedEntries, info: AssetCatalogJSON.info),
           for: "\(setPath)/Contents.json"
         )
       ),
     ]
+  }
+
+  /// Ensures dynamic color fallbacks are encoded in Xcode-compatible form.
+  private func normalizedEntriesForGeneration() throws(ResourceGeneratorError) -> [Entry] {
+    var normalized = entries
+    let hasUnscopedAny = normalized.contains { luminosity(in: $0.appearances) == nil }
+    guard !hasUnscopedAny else { return normalized }
+
+    let lightIndex = normalized.firstIndex { luminosity(in: $0.appearances) == .light }
+    let hasDark = normalized.contains { luminosity(in: $0.appearances) == .dark }
+
+    guard let lightIndex, hasDark else { return normalized }
+
+    let original = normalized[lightIndex]
+    normalized[lightIndex] = Entry(
+      idiom: original.idiom,
+      color: original.color,
+      appearances: removingLuminosity(from: original.appearances)
+    )
+    return normalized
+  }
+
+  private func luminosity(in appearances: [AssetAppearance]?) -> AssetAppearance.Luminosity? {
+    guard let appearances else { return nil }
+    for appearance in appearances where appearance.appearance == "luminosity" {
+      return AssetAppearance.Luminosity(rawValue: appearance.value)
+    }
+    return nil
+  }
+
+  private func removingLuminosity(from appearances: [AssetAppearance]?) -> [AssetAppearance]? {
+    guard let appearances else { return nil }
+    let filtered = appearances.filter { $0.appearance != "luminosity" }
+    return filtered.isEmpty ? nil : filtered
   }
 }

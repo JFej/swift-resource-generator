@@ -38,6 +38,8 @@ ImageSet("Logo") {
 
 Use ``ColorSet(_:red:green:blue:alpha:appearances:)`` for one color entry, or instantiate ``AssetColorSet`` directly for advanced cases.
 
+For dynamic light/dark colors, include an unscoped fallback (`Any`) plus a dark override. If a color set only contains `light` and `dark` luminosity entries, generation rewrites the `light` entry to `Any` automatically.
+
 ## Data and symbols
 
 Use explicit file models instead of tuples:
